@@ -169,9 +169,9 @@ func runSecretsFinder(filePath string) []database.JsSecret {
 		if secretType == "" || value == "" {
 			continue
 		}
-		if isNoise(value) {
-			continue
-		}
+		// if isNoise(value) {
+		// 	continue
+		// }
 		secrets = append(secrets, database.JsSecret{
 			File:  filePath,
 			Type:  secretType,
@@ -238,11 +238,15 @@ func analyzeJsFiles(jsDir, domain, hostURL string) error {
 	var allLinks []database.JsLink
 	var wg sync.WaitGroup
 
+	sem := make(chan struct{}, 30)
+
 	for _, f := range files {
 		wg.Add(2)
 		go func(filePath string) {
 			defer wg.Done()
+			sem <- struct{}{}
 			links := runLinkFinder(filePath)
+			<-sem
 			mu.Lock()
 			for _, l := range links {
 				allLinks = append(allLinks, database.JsLink{File: filePath, URL: l})
@@ -251,7 +255,9 @@ func analyzeJsFiles(jsDir, domain, hostURL string) error {
 		}(f)
 		go func(filePath string) {
 			defer wg.Done()
+			sem <- struct{}{}
 			secrets := runSecretsFinder(filePath)
+			<-sem
 			mu.Lock()
 			allSecrets = append(allSecrets, secrets...)
 			mu.Unlock()
