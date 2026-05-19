@@ -24,67 +24,84 @@ func extractHostname(rawURL string) (string, error) {
 	return u.Hostname(), nil
 }
 
-func runGau(tmpDir, id, hostURL string) {
-	fileName := fmt.Sprintf("%s/%s_gau.txt", tmpDir, id)
+func appendURLs(path string, data []byte) int {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	count := 0
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
+			f.WriteString(line + "\n")
+			count++
+		}
+	}
+	return count
+}
+
+func runStdout(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), err
+}
+
+func runGau(finalURLs, hostURL string) {
 	domain, err := extractHostname(hostURL)
 	if err != nil {
 		slog.Error("js: gau failed to extract hostname", "host", hostURL, "err", err)
 		return
 	}
-	res, err := exec.Command("gau", domain).CombinedOutput()
+	res, err := runStdout("gau", domain)
 	if err != nil {
-		slog.Error("js: gau failed", "host", domain, "err", err, "out", string(res))
+		slog.Error("js: gau failed", "host", domain, "err", err)
 		return
 	}
-	slog.Debug("js: gau done", "host", domain, "lines", bytes.Count(res, []byte("\n")))
-	os.WriteFile(fileName, res, 0644)
+	n := appendURLs(finalURLs, res)
+	slog.Debug("js: gau done", "host", domain, "urls", n)
 }
 
-func runWayback(tmpDir, id, hostURL string) {
-	fileName := fmt.Sprintf("%s/%s_wayback.txt", tmpDir, id)
+func runWayback(finalURLs, hostURL string) {
 	domain, err := extractHostname(hostURL)
 	if err != nil {
 		slog.Error("js: waybackurls failed to extract hostname", "host", hostURL, "err", err)
 		return
 	}
-	res, err := exec.Command("waybackurls", domain).CombinedOutput()
+	res, err := runStdout("waybackurls", domain)
 	if err != nil {
-		slog.Error("js: waybackurls failed", "host", domain, "err", err, "out", string(res))
+		slog.Error("js: waybackurls failed", "host", domain, "err", err)
 		return
 	}
-	slog.Debug("js: waybackurls done", "host", domain, "lines", bytes.Count(res, []byte("\n")))
-	os.WriteFile(fileName, res, 0644)
+	n := appendURLs(finalURLs, res)
+	slog.Debug("js: waybackurls done", "host", domain, "urls", n)
 }
 
-func runKatana(tmpDir, id, hostURL string, headless bool) {
-	fileName := fmt.Sprintf("%s/%s_katana.txt", tmpDir, id)
+func runKatana(finalURLs, hostURL string, headless bool) {
 	args := []string{"-u", hostURL, "-d", "2", "-jc"}
 	if headless {
 		args = append(args, "-hl", "-nos")
 	}
-	out, err := exec.Command("katana", args...).CombinedOutput()
+	out, err := runStdout("katana", args...)
 	if err != nil {
-		slog.Error("js: katana failed", "host", hostURL, "err", err, "out", string(out))
+		slog.Error("js: katana failed", "host", hostURL, "err", err)
 		return
 	}
-	slog.Debug("js: katana done", "host", hostURL, "lines", bytes.Count(out, []byte("\n")))
-	os.WriteFile(fileName, out, 0644)
+	n := appendURLs(finalURLs, out)
+	slog.Debug("js: katana done", "host", hostURL, "urls", n)
 }
 
-func deDupeAndExtract(tmpDir, hostURL, id, jsDir, urlsPath string) error {
+func extractJsURLs(finalURLs, hostURL, jsURLsPath string) error {
 	hostname, err := extractHostname(hostURL)
 	if err != nil {
 		return err
 	}
-	allURLs := jsDir + "/final_urls.txt"
-	dedupCmd := fmt.Sprintf("cat %s/%s_*.txt | sort -u > %s", tmpDir, id, allURLs)
-	if out, err := exec.Command("sh", "-c", dedupCmd).CombinedOutput(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
-			return fmt.Errorf("dedup failed: %w — %s", err, string(out))
-		}
-	}
-	jsCmd := fmt.Sprintf("grep -iE '\\.js(\\?|$)' %s | grep '%s' > %s", allURLs, hostname, urlsPath)
-	if out, err := exec.Command("sh", "-c", jsCmd).CombinedOutput(); err != nil {
+	cmd := fmt.Sprintf("grep -iE '\\.js(\\?|$)' %s | grep '%s' | sort -u > %s", finalURLs, hostname, jsURLsPath)
+	if out, err := exec.Command("sh", "-c", cmd).CombinedOutput(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
 			return fmt.Errorf("js filter failed: %w — %s", err, string(out))
 		}
@@ -282,41 +299,41 @@ func analyzeJsFiles(jsDir, domain, hostURL string) error {
 func ScrapeAndScan(host, id, domain string, headless bool) {
 	SetJob(id, JobResult{Status: JobPending})
 
-	tmpDir := fmt.Sprintf("./temp/%s", id)
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		SetJob(id, JobResult{Status: JobFailed, Error: err.Error()})
-		return
-	}
-
 	home, _ := os.UserHomeDir()
 	jsDir := fmt.Sprintf("%s/.recon/%s/%s/js", home, domain, SanitizeForFilename(host))
+	finalURLs := jsDir + "/final_urls.txt"
 	urlsPath := jsDir + "/js_urls.txt"
 
-	// ensure jsDir exists before writing urlsPath into it
 	if err := os.MkdirAll(jsDir, 0755); err != nil {
 		SetJob(id, JobResult{Status: JobFailed, Error: err.Error()})
 		return
 	}
 
+	// clear previous run
+	os.Remove(finalURLs)
+
 	var wg sync.WaitGroup
 	wg.Add(3)
-	go func() { defer wg.Done(); runGau(tmpDir, id, host) }()
-	go func() { defer wg.Done(); runWayback(tmpDir, id, host) }()
-	go func() { defer wg.Done(); runKatana(tmpDir, id, host, headless) }()
+	go func() { defer wg.Done(); runGau(finalURLs, host) }()
+	go func() { defer wg.Done(); runWayback(finalURLs, host) }()
+	go func() { defer wg.Done(); runKatana(finalURLs, host, headless) }()
 	wg.Wait()
 
-	if err := deDupeAndExtract(tmpDir, host, id, jsDir, urlsPath); err != nil {
+	if info, err := os.Stat(finalURLs); err == nil {
+		slog.Info("js: all URLs saved", "host", host, "final_urls_bytes", info.Size())
+	} else {
+		slog.Warn("js: no URLs found", "host", host)
+	}
+
+	if err := extractJsURLs(finalURLs, host, urlsPath); err != nil {
 		SetJob(id, JobResult{Status: JobFailed, Error: err.Error()})
 		return
 	}
 
-	if info, err := os.Stat(jsDir + "/final_urls.txt"); err == nil {
-		slog.Info("js: all URLs saved", "host", host, "final_urls_bytes", info.Size())
-	}
 	if info, err := os.Stat(urlsPath); err == nil {
 		slog.Info("js: JS URLs filtered", "host", host, "js_list_bytes", info.Size())
 	} else {
-		slog.Warn("js: no JS URLs found after dedup", "host", host)
+		slog.Warn("js: no JS URLs found after filter", "host", host)
 	}
 
 	if err := ScrapeJsFiles(host, domain, jsDir, urlsPath); err != nil {
@@ -335,7 +352,6 @@ func ScrapeAndScan(host, id, domain string, headless bool) {
 		return
 	}
 
-	os.RemoveAll(tmpDir)
 	os.RemoveAll(jsDir + "/response")
 	SetJob(id, JobResult{Status: JobDone})
 }
