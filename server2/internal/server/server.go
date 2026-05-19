@@ -56,6 +56,10 @@ func Run() {
 		r.Use(agentMiddleware)
 
 		r.Get("/api/agent/{domain}/data", AgentData_Handler)
+
+		r.Post("/api/agent/{domain}/host/{hostID}/js", JsTool_Handler)
+		r.Get("/api/agent/{domain}/host/{hostID}/js", JsTool_Handler)
+		r.Get("/api/agent/tools/status", ToolStatus_Handler)
 	})
 
 	r.Get("/login", serveHTML("static/dist/index.html"))
