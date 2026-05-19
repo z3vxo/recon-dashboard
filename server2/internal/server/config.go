@@ -2,6 +2,8 @@ package server
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +16,7 @@ import (
 type Config struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"password_hash"`
+	AgentSecret  string `json:"agent_secret"`
 }
 
 var cfg *Config
@@ -80,9 +83,14 @@ func RunSetup() error {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	secretBytes := make([]byte, 32)
+	rand.Read(secretBytes)
+	agentSecret := base64.URLEncoding.EncodeToString(secretBytes)
+
 	c := Config{
 		Username:     username,
 		PasswordHash: string(hash),
+		AgentSecret:  agentSecret,
 	}
 
 	data, _ := json.MarshalIndent(c, "", "  ")
@@ -91,5 +99,6 @@ func RunSetup() error {
 	}
 
 	fmt.Println("[+] Config saved to", configPath())
+	fmt.Println("[+] Agent JWT secret generated — use /api/agent/token to get a token")
 	return nil
 }

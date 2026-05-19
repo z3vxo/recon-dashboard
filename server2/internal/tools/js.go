@@ -319,6 +319,9 @@ func ScrapeAndScan(host, id, domain string, headless bool) {
 	go func() { defer wg.Done(); runKatana(finalURLs, host, headless) }()
 	wg.Wait()
 
+	// deduplicate final_urls.txt in place
+	exec.Command("sh", "-c", fmt.Sprintf("sort -u %s -o %s", finalURLs, finalURLs)).Run()
+
 	if info, err := os.Stat(finalURLs); err == nil {
 		slog.Info("js: all URLs saved", "host", host, "final_urls_bytes", info.Size())
 	} else {

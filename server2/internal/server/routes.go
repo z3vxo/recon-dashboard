@@ -244,10 +244,6 @@ func ScreenShotServe_Handler(w http.ResponseWriter, r *http.Request) {
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/login" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		cookie, err := r.Cookie("session")
 		if err != nil {
 			slog.Warn("unauthorized request - no session cookie", "path", r.URL.Path, "ip", realIP(r))

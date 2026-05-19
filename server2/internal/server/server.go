@@ -16,42 +16,51 @@ func Run() {
 	loadSessions()
 	r := chi.NewRouter()
 
-	r.Use(authMiddleware)
-
+	// public
 	r.Post("/api/login", Login_Handler)
+	r.Post("/api/agent/token", AgentToken_Handler)
 	r.Get("/goaway", GoAway_Handler)
 
-	r.Get("/api/{domain}/hosts", Host_Handler)
-	r.Get("/api/{domain}/hits", Juicy_Handler)
-	r.Get("/api/{domain}/summary", Summary_Handler)
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware)
 
-	r.Patch("/api/{domain}/host/{hostID}/triage", Triage_Handler)
-	r.Patch("/api/{domain}/host/{hostID}/notes", Notes_Handler)
+		r.Get("/api/{domain}/hosts", Host_Handler)
+		r.Get("/api/{domain}/hits", Juicy_Handler)
+		r.Get("/api/{domain}/summary", Summary_Handler)
 
-	r.Post("/api/{domain}/host/{hostID}/screenshot", ScreenShot_Handler)
-	r.Get("/api/{domain}/host/{hostID}/screenshot/status", ScreenShotStatus_Handler)
-	r.Get("/api/{domain}/host/{hostID}/screenshot", ScreenShotServe_Handler)
+		r.Patch("/api/{domain}/host/{hostID}/triage", Triage_Handler)
+		r.Patch("/api/{domain}/host/{hostID}/notes", Notes_Handler)
 
-	r.Post("/api/{domain}/host/{hostID}/js", JsTool_Handler)
-	r.Get("/api/{domain}/host/{hostID}/js", JsTool_Handler)
-	r.Get("/api/{domain}/asn/{asn}", Asn_Handler)
+		r.Post("/api/{domain}/host/{hostID}/screenshot", ScreenShot_Handler)
+		r.Get("/api/{domain}/host/{hostID}/screenshot/status", ScreenShotStatus_Handler)
+		r.Get("/api/{domain}/host/{hostID}/screenshot", ScreenShotServe_Handler)
 
-	r.Get("/api/tools/status", ToolStatus_Handler)
-	r.Post("/api/workflow", Worflow_Handler)
+		r.Post("/api/{domain}/host/{hostID}/js", JsTool_Handler)
+		r.Get("/api/{domain}/host/{hostID}/js", JsTool_Handler)
+		r.Get("/api/{domain}/asn/{asn}", Asn_Handler)
 
-	r.Post("/api/import/{domain}", ImportHandler)
-	r.Delete("/api/delete/{domain}", deleteTargetHandler)
+		r.Get("/api/tools/status", ToolStatus_Handler)
+		r.Post("/api/workflow", Worflow_Handler)
 
-	r.Post("/api/targets/new", NewTargetHandler)
-	r.Get("/api/targets", Targets_Handler)
+		r.Post("/api/import/{domain}", ImportHandler)
+		r.Delete("/api/delete/{domain}", deleteTargetHandler)
 
-	//r.Get("/api/agent/{domain}/data", AgentData_Handler)
+		r.Post("/api/targets/new", NewTargetHandler)
+		r.Get("/api/targets", Targets_Handler)
 
-	r.Get("/api/logs", Logs_Handler)
+		r.Get("/api/logs", Logs_Handler)
+	})
+
+	// agent routes — JWT auth
+	r.Group(func(r chi.Router) {
+		r.Use(agentMiddleware)
+
+		r.Get("/api/agent/{domain}/data", AgentData_Handler)
+	})
+
 	r.Get("/login", serveHTML("static/dist/index.html"))
 	r.Get("/dashboard", serveHTML("static/dist/index.html"))
 
-	// React SPA — targets page (serves dist/index.html for / and any non-API routes)
 	r.Get("/", serveHTML("static/dist/index.html"))
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 		if strings.HasPrefix(req.URL.Path, "/api/") {
@@ -61,17 +70,16 @@ func Run() {
 		serveHTML("static/dist/index.html")(w, req)
 	})
 
-	// Middleware wrapper: static assets served before Chi routing.
 	staticFS := http.FileServer(http.Dir("static"))
 	distFS := http.FileServer(http.Dir("static/dist"))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		p := req.URL.Path
-		// Vite build output: JS/CSS chunks under /assets/
+
 		if strings.HasPrefix(p, "/assets/") {
 			distFS.ServeHTTP(w, req)
 			return
 		}
-		// Legacy static files and images
+
 		if strings.HasPrefix(p, "/css/") || strings.HasPrefix(p, "/js/") || strings.HasPrefix(p, "/images/") {
 			staticFS.ServeHTTP(w, req)
 			return
