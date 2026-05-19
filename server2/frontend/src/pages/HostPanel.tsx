@@ -27,7 +27,7 @@ export default function HostPanel({ host, domain, onClose, onOpenInOverview, onT
 
   async function saveTriage(status: string) {
     setTriage(status)
-    await fetchApi(`/api/${enc(domain)}/host/${enc(host.url)}/triage`, {
+    await fetchApi(`/api/${enc(domain)}/host/${host.host_id}/triage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain, status }),
@@ -36,7 +36,7 @@ export default function HostPanel({ host, domain, onClose, onOpenInOverview, onT
   }
 
   async function saveNotes() {
-    const r = await fetchApi(`/api/${enc(domain)}/host/${enc(host.url)}/notes`, {
+    const r = await fetchApi(`/api/${enc(domain)}/host/${host.host_id}/notes`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain, notes }),

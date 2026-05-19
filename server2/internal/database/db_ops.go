@@ -1,6 +1,7 @@
 package database
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,6 +12,29 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func GenerateHostID() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 10)
+	rand.Read(b)
+	for i := range b {
+		b[i] = charset[b[i]%byte(len(charset))]
+	}
+	return "h_" + string(b)
+}
+
+func ResolveHostID(domain, hostID string) (string, error) {
+	db, err := getDB(domain)
+	if err != nil {
+		return "", err
+	}
+	var name string
+	err = db.QueryRow("SELECT domain_name FROM domains WHERE host_id = ?", hostID).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("host not found: %w", err)
+	}
+	return name, nil
+}
 
 var (
 	connections = map[string]*sql.DB{}
@@ -41,6 +65,10 @@ func migrateDB(db *sql.DB) {
 		url        TEXT,
 		FOREIGN KEY(js_file_id) REFERENCES js_files(id)
 	)`)
+
+	db.Exec(`ALTER TABLE domains ADD COLUMN host_id TEXT DEFAULT ''`)
+	backfillHostIDs(db)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_domains_host_id ON domains(host_id)`)
 
 	// Junction tables — normalise comma-separated columns
 	db.Exec(`CREATE TABLE IF NOT EXISTS domain_ips (
@@ -114,6 +142,23 @@ func backfillJunctionTables(db *sql.DB) {
 	}
 }
 
+func backfillHostIDs(db *sql.DB) {
+	rows, err := db.Query(`SELECT id FROM domains WHERE host_id = '' OR host_id IS NULL`)
+	if err != nil {
+		return
+	}
+	var ids []int
+	for rows.Next() {
+		var id int
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		db.Exec(`UPDATE domains SET host_id = ? WHERE id = ?`, GenerateHostID(), id)
+	}
+}
+
 func reconHome() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -184,6 +229,7 @@ func CreateNewTarget(name string) error {
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS domains (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        host_id      TEXT UNIQUE DEFAULT '',
         domain_name  TEXT UNIQUE,
         status_code  TEXT,
         open_ports   TEXT,
@@ -306,34 +352,20 @@ func DeleteData(domain string) error {
 	return nil
 }
 
-func WriteNote(target string, hostURL string, note string) error {
+func WriteNote(target string, hostID string, note string) error {
 	db, err := getDB(target)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
-
-	_, err = db.Exec("UPDATE domains SET notes = ? WHERE domain_name = ?", note, hostURL)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	return nil
+	_, err = db.Exec("UPDATE domains SET notes = ? WHERE host_id = ?", note, hostID)
+	return err
 }
 
-func UpdateTriage(target string, hostURL string, triageStatus string) error {
-
+func UpdateTriage(target string, hostID string, triageStatus string) error {
 	db, err := getDB(target)
 	if err != nil {
 		return err
 	}
-
-	_, err = db.Exec("UPDATE domains SET triage_status = ? WHERE domain_name = ?", triageStatus, hostURL)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
+	_, err = db.Exec("UPDATE domains SET triage_status = ? WHERE host_id = ?", triageStatus, hostID)
+	return err
 }

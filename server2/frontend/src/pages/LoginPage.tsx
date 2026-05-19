@@ -53,9 +53,6 @@ export default function LoginPage() {
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '0.05em' }}>
           VANTAGE
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: "'Fira Code', monospace", marginTop: 4 }}>
-          operator access only
-        </div>
       </div>
 
       {/* card */}

@@ -199,14 +199,15 @@ func ImportHttpx(domain string) error {
 	}
 
 	stmtDomain, err := tx.Prepare(`
-		INSERT INTO domains (domain_name, status_code, title, server, content_type, open_ports)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO domains (domain_name, status_code, title, server, content_type, open_ports, host_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(domain_name) DO UPDATE SET
 			status_code  = excluded.status_code,
 			title        = excluded.title,
 			server       = excluded.server,
 			content_type = excluded.content_type,
-			open_ports   = excluded.open_ports`)
+			open_ports   = excluded.open_ports,
+			host_id      = CASE WHEN domains.host_id = '' OR domains.host_id IS NULL THEN excluded.host_id ELSE domains.host_id END`)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -260,7 +261,7 @@ func ImportHttpx(domain string) error {
 			continue
 		}
 
-		result, err := stmtDomain.Exec(entry.URL, entry.StatusCode, entry.Title, entry.WebServer, entry.ContentType, joinInts(entry.OpenPorts))
+		result, err := stmtDomain.Exec(entry.URL, entry.StatusCode, entry.Title, entry.WebServer, entry.ContentType, joinInts(entry.OpenPorts), GenerateHostID())
 		if err != nil {
 			tx.Rollback()
 			fmt.Println("failed to insert domain:", err)

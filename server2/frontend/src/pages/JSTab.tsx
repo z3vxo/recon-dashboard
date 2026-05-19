@@ -257,16 +257,15 @@ export default function JSTab({ domain, hosts }: Props) {
     if (activeId === null) return
     const host = hosts.find(h => h.id === activeId)
     if (!host) return
-    const hostURL = host.url
-    // Don't overwrite an in-progress or completed scan
-    const existing = scans.get(hostURL)
+    const hid = host.host_id
+    const existing = scans.get(hid)
     if (existing && existing.phase !== 'idle') return
 
-    fetchApi(`/api/${enc(domain)}/host/${enc(hostURL)}/js`)
+    fetchApi(`/api/${enc(domain)}/host/${hid}/js`)
       .then(r => r.json())
       .then(d => {
         if ((d.secrets?.length ?? 0) > 0 || (d.links?.length ?? 0) > 0) {
-          setScan(hostURL, {
+          setScan(hid, {
             phase: 'done',
             result: { secrets: d.secrets ?? [], links: d.links ?? [] },
           })
@@ -284,59 +283,59 @@ export default function JSTab({ domain, hosts }: Props) {
     }
   }, [])
 
-  async function startScan(hostURL: string, headless: boolean) {
-    if (pollRefs.current.has(hostURL)) return
-    setScan(hostURL, { phase: 'polling' })
+  async function startScan(hostID: string, hostURL: string, headless: boolean) {
+    if (pollRefs.current.has(hostID)) return
+    setScan(hostID, { phase: 'polling' })
 
     try {
-      const r = await fetchApi(`/api/${enc(domain)}/host/${enc(hostURL)}/js`, {
+      const r = await fetchApi(`/api/${enc(domain)}/host/${hostID}/js`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ headless }),
       })
       if (!r.ok) {
-        setScan(hostURL, { phase: 'failed', error: 'Failed to start scan' })
+        setScan(hostID, { phase: 'failed', error: 'Failed to start scan' })
         return
       }
       const data = await r.json()
       const jobId: string = data.id
-      setScan(hostURL, { phase: 'polling', jobId })
+      setScan(hostID, { phase: 'polling', jobId })
 
       const interval = setInterval(async () => {
         try {
           const r2 = await fetchApi(`/api/tools/status?id=${jobId}`)
           const d = await r2.json()
           if (d.status === 'done') {
-            stopPoll(hostURL)
+            stopPoll(hostID)
             try {
-              const r3 = await fetchApi(`/api/${enc(domain)}/host/${enc(hostURL)}/js`)
+              const r3 = await fetchApi(`/api/${enc(domain)}/host/${hostID}/js`)
               const result = await r3.json()
               const secrets: JsSecret[] = result.secrets ?? []
               const links: JsLink[] = result.links ?? []
-              setScan(hostURL, { phase: 'done', jobId, result: { secrets, links } })
+              setScan(hostID, { phase: 'done', jobId, result: { secrets, links } })
               showToast(
                 `JS scan done — ${hostURL}: ${secrets.length} secret${secrets.length !== 1 ? 's' : ''}, ${links.length} link${links.length !== 1 ? 's' : ''}`,
                 'success'
               )
             } catch {
-              setScan(hostURL, { phase: 'failed', jobId, error: 'Failed to fetch results' })
+              setScan(hostID, { phase: 'failed', jobId, error: 'Failed to fetch results' })
               showToast(`JS scan failed for ${hostURL}`, 'error')
             }
           } else if (d.status === 'failed') {
-            stopPoll(hostURL)
-            setScan(hostURL, { phase: 'failed', jobId, error: d.error || 'Scan failed' })
+            stopPoll(hostID)
+            setScan(hostID, { phase: 'failed', jobId, error: d.error || 'Scan failed' })
             showToast(`JS scan failed for ${hostURL}`, 'error')
           }
         } catch {
-          stopPoll(hostURL)
-          setScan(hostURL, prev => ({ ...prev, phase: 'failed', error: 'Network error while polling' }))
+          stopPoll(hostID)
+          setScan(hostID, prev => ({ ...prev, phase: 'failed', error: 'Network error while polling' }))
           showToast(`JS scan failed for ${hostURL}`, 'error')
         }
       }, 5000)
 
-      pollRefs.current.set(hostURL, interval)
+      pollRefs.current.set(hostID, interval)
     } catch {
-      setScan(hostURL, { phase: 'failed', error: 'Failed to start scan' })
+      setScan(hostID, { phase: 'failed', error: 'Failed to start scan' })
     }
   }
 
@@ -448,7 +447,7 @@ export default function JSTab({ domain, hosts }: Props) {
                 }
 
                 const h = item.host
-                const scanPhase = scans.get(h.url)?.phase
+                const scanPhase = scans.get(h.host_id)?.phase
                 return (
                   <div
                     key={h.id}
@@ -488,8 +487,8 @@ export default function JSTab({ domain, hosts }: Props) {
           <HostJsPanel
             key={activeHost.id}
             host={activeHost}
-            scan={scans.get(activeHost.url) ?? { phase: 'idle' }}
-            onStartScan={(headless) => startScan(activeHost.url, headless)}
+            scan={scans.get(activeHost.host_id) ?? { phase: 'idle' }}
+            onStartScan={(headless) => startScan(activeHost.host_id, activeHost.url, headless)}
           />
         ) : (
           <div className="overview-empty-msg">← Select a host to analyse its JavaScript</div>

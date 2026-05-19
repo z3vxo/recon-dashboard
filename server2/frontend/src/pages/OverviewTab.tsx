@@ -24,7 +24,7 @@ interface SsState {
 
 // ── Screenshot hook ────────────────────────────────────────────────────────
 
-function useScreenshot(domain: string, hostURL: string) {
+function useScreenshot(domain: string, hostID: string) {
   const [ss, setSs] = useState<SsState>({ phase: 'idle' })
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tokenRef = useRef<string | null>(null)
@@ -35,26 +35,24 @@ function useScreenshot(domain: string, hostURL: string) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }
 
-  // Reset + auto-load existing screenshot whenever host changes
   useEffect(() => {
     stopPolling()
     tokenRef.current = null
     setSs({ phase: 'idle' })
 
-    // Probe for existing screenshot — if 404 stays idle
     const img = new Image()
-    img.onload = () => setSs({ phase: 'done', imgPath: `/api/${enc(domain)}/host/${enc(hostURL)}/screenshot` })
-    img.src = `/api/${enc(domain)}/host/${enc(hostURL)}/screenshot?t=${Date.now()}`
+    img.onload = () => setSs({ phase: 'done', imgPath: `/api/${enc(domain)}/host/${hostID}/screenshot` })
+    img.src = `/api/${enc(domain)}/host/${hostID}/screenshot?t=${Date.now()}`
 
     return stopPolling
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domain, hostURL])
+  }, [domain, hostID])
 
   async function take() {
     if (pollRef.current) return
     setSs({ phase: 'polling' })
     try {
-      const r = await fetchApi(`/api/${enc(domain)}/host/${enc(hostURL)}/screenshot`, { method: 'POST' })
+      const r = await fetchApi(`/api/${enc(domain)}/host/${hostID}/screenshot`, { method: 'POST' })
       if (!r.ok) { setSs({ phase: 'failed', error: 'Failed to start' }); return }
       const data = await r.json()
       tokenRef.current = data.token
@@ -62,7 +60,7 @@ function useScreenshot(domain: string, hostURL: string) {
       pollRef.current = setInterval(async () => {
         try {
           const r2 = await fetchApi(
-            `/api/${enc(domain)}/host/${enc(hostURL)}/screenshot/status?token=${tokenRef.current}`
+            `/api/${enc(domain)}/host/${hostID}/screenshot/status?token=${tokenRef.current}`
           )
           const d = await r2.json()
           if (d.status === 'done') {
@@ -72,7 +70,6 @@ function useScreenshot(domain: string, hostURL: string) {
             stopPolling()
             setSs({ phase: 'failed', error: d.error || 'Screenshot failed' })
           }
-          // pending → keep polling
         } catch {
           stopPolling()
           setSs({ phase: 'failed', error: 'Network error while polling' })
@@ -92,7 +89,7 @@ function HostDetail({ domain, host, hits, onTriageChange, onNotesChange }: { dom
   const [triage, setTriage] = useState(host.triage_status || 'none')
   const [notes, setNotes] = useState(host.notes || '')
   const [notesToast, setNotesToast] = useState<string | null>(null)
-  const { ss, take } = useScreenshot(domain, host.url)
+  const { ss, take } = useScreenshot(domain, host.host_id)
 
   const enc = encodeURIComponent
 
@@ -106,7 +103,7 @@ function HostDetail({ domain, host, hits, onTriageChange, onNotesChange }: { dom
 
   async function saveTriage(status: string) {
     setTriage(status)
-    await fetchApi(`/api/${enc(domain)}/host/${enc(host.url)}/triage`, {
+    await fetchApi(`/api/${enc(domain)}/host/${host.host_id}/triage`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain, status }),
@@ -115,7 +112,7 @@ function HostDetail({ domain, host, hits, onTriageChange, onNotesChange }: { dom
   }
 
   async function saveNotes() {
-    const r = await fetchApi(`/api/${enc(domain)}/host/${enc(host.url)}/notes`, {
+    const r = await fetchApi(`/api/${enc(domain)}/host/${host.host_id}/notes`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain, notes }),

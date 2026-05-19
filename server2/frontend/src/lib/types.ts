@@ -9,6 +9,7 @@ export async function fetchApi(input: string, init?: RequestInit): Promise<Respo
 
 export interface Host {
   id: number
+  host_id: string
   url: string
   status: string
   sc: string

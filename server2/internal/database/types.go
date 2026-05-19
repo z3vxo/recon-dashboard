@@ -66,6 +66,7 @@ type Port struct {
 
 type Host struct {
 	ID           int
+	HostID       string
 	DomainName   string
 	StatusCode   string
 	OpenPorts    string
@@ -82,6 +83,7 @@ type Host struct {
 
 type HostResponse struct {
 	ID           int      `json:"id"`
+	HostID       string   `json:"host_id"`
 	DomainName   string   `json:"url"`
 	SC           string   `json:"sc"`
 	StatusCode   string   `json:"status"`

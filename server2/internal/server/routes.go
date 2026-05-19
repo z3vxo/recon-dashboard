@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -36,7 +35,7 @@ func writeJSON(w http.ResponseWriter, status int, msg any) {
 
 func Triage_Handler(w http.ResponseWriter, r *http.Request) {
 	domain := chi.URLParam(r, "domain")
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
+	hostID := chi.URLParam(r, "hostID")
 
 	var data TriageData
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -44,33 +43,31 @@ func Triage_Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := database.UpdateTriage(domain, hostURL, data.Status)
+	err := database.UpdateTriage(domain, hostID, data.Status)
 	if err != nil {
-		slog.Error("failed to update triage", "domain", domain, "host", hostURL, "err", err)
+		slog.Error("failed to update triage", "domain", domain, "hostID", hostID, "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"status": "failed to insert"})
 		return
 	}
 
-	slog.Debug("triage updated", "domain", domain, "host", hostURL, "status", data.Status)
+	slog.Debug("triage updated", "domain", domain, "hostID", hostID, "status", data.Status)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "Status updated!"})
-	return
-
 }
 
 func Notes_Handler(w http.ResponseWriter, r *http.Request) {
 	domain := chi.URLParam(r, "domain")
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
+	hostID := chi.URLParam(r, "hostID")
 
 	var data NoteStruct
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		slog.Error("Failed To Insert Json in Notes", "hostURL", hostURL)
+		slog.Error("Failed To Insert Json in Notes", "hostID", hostID)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"status": "Failed to decode json"})
 		return
 	}
 
-	err := database.WriteNote(domain, hostURL, data.Note)
+	err := database.WriteNote(domain, hostID, data.Note)
 	if err != nil {
-		slog.Error("Failed To Insert Note", "hostURL", hostURL)
+		slog.Error("Failed To Insert Note", "hostID", hostID)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"status": "failed to insert"})
 		return
 	}
@@ -185,7 +182,13 @@ func deleteTargetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ScreenShot_Handler(w http.ResponseWriter, r *http.Request) {
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
+	domain := chi.URLParam(r, "domain")
+	hostID := chi.URLParam(r, "hostID")
+	hostURL, err := database.ResolveHostID(domain, hostID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "host not found"})
+		return
+	}
 	id := uuid.NewString()
 	slog.Info("screenshot started", "host", hostURL, "token", id)
 	go tools.Screenshot(hostURL, id)
@@ -193,7 +196,13 @@ func ScreenShot_Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ScreenShotStatus_Handler(w http.ResponseWriter, r *http.Request) {
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
+	domain := chi.URLParam(r, "domain")
+	hostID := chi.URLParam(r, "hostID")
+	hostURL, err := database.ResolveHostID(domain, hostID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "host not found"})
+		return
+	}
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing token"})
@@ -215,7 +224,13 @@ func ScreenShotStatus_Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ScreenShotServe_Handler(w http.ResponseWriter, r *http.Request) {
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
+	domain := chi.URLParam(r, "domain")
+	hostID := chi.URLParam(r, "hostID")
+	hostURL, err := database.ResolveHostID(domain, hostID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	safe := tools.SanitizeForFilename(hostURL)
 	for _, ext := range []string{".png", ".jpg", ".jpeg"} {
 		path := fmt.Sprintf("./static/images/screenshots/%s%s", safe, ext)
@@ -371,8 +386,13 @@ func Worflow_Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func JsTool_Handler(w http.ResponseWriter, r *http.Request) {
-	hostURL, _ := url.QueryUnescape(chi.URLParam(r, "hostURL"))
 	domain := chi.URLParam(r, "domain")
+	hostID := chi.URLParam(r, "hostID")
+	hostURL, err := database.ResolveHostID(domain, hostID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "host not found"})
+		return
+	}
 
 	switch r.Method {
 	case http.MethodPost:
@@ -406,6 +426,11 @@ func Summary_Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, data)
 }
+
+// func AgentData_Handler(w http.ResponseWriter, r *http.Request) {
+// 	domain := chi.URLParam(r, "domain")
+
+// }
 
 func ToolStatus_Handler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")

@@ -98,6 +98,7 @@ func transformHost(h Host) HostResponse {
 
 	return HostResponse{
 		ID:           h.ID,
+		HostID:       h.HostID,
 		DomainName:   h.DomainName,
 		SC:           statusClass(h.StatusCode),
 		StatusCode:   h.StatusCode,
@@ -151,7 +152,7 @@ func ReadHosts(domain string) (HostsResult, error) {
 	}
 
 	rows, err := db.Query(`
-		SELECT d.id, d.domain_name, d.status_code, d.open_ports, d.title,
+		SELECT d.id, d.host_id, d.domain_name, d.status_code, d.open_ports, d.title,
 			COALESCE((SELECT GROUP_CONCAT(tech, ', ') FROM domain_tech   WHERE domain_id = d.id), '') AS tech_stack,
 			d.content_type, d.server,
 			COALESCE((SELECT GROUP_CONCAT(ip,   ', ') FROM domain_ips    WHERE domain_id = d.id), '') AS ips,
@@ -171,7 +172,7 @@ func ReadHosts(domain string) (HostsResult, error) {
 	for rows.Next() {
 		var h Host
 		err := rows.Scan(
-			&h.ID, &h.DomainName, &h.StatusCode, &h.OpenPorts,
+			&h.ID, &h.HostID, &h.DomainName, &h.StatusCode, &h.OpenPorts,
 			&h.Title, &h.TechStack, &h.ContentType, &h.Server,
 			&h.IPs, &h.CNAME, &h.Badges, &h.TriageStatus, &h.Notes,
 		)

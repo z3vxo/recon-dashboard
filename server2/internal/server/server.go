@@ -10,7 +10,7 @@ import (
 )
 
 //  {domain} -> target level e.g domain.com
-//  {hostURL} -> host level, e.g https://domain.com:443 -> routes need url decoding!
+//  {hostID} -> host level, e.g https://domain.com:443 -> routes need url decoding!
 
 func Run() {
 	loadSessions()
@@ -25,15 +25,15 @@ func Run() {
 	r.Get("/api/{domain}/hits", Juicy_Handler)
 	r.Get("/api/{domain}/summary", Summary_Handler)
 
-	r.Patch("/api/{domain}/host/{hostURL}/triage", Triage_Handler)
-	r.Patch("/api/{domain}/host/{hostURL}/notes", Notes_Handler)
+	r.Patch("/api/{domain}/host/{hostID}/triage", Triage_Handler)
+	r.Patch("/api/{domain}/host/{hostID}/notes", Notes_Handler)
 
-	r.Post("/api/{domain}/host/{hostURL}/screenshot", ScreenShot_Handler)
-	r.Get("/api/{domain}/host/{hostURL}/screenshot/status", ScreenShotStatus_Handler)
-	r.Get("/api/{domain}/host/{hostURL}/screenshot", ScreenShotServe_Handler)
+	r.Post("/api/{domain}/host/{hostID}/screenshot", ScreenShot_Handler)
+	r.Get("/api/{domain}/host/{hostID}/screenshot/status", ScreenShotStatus_Handler)
+	r.Get("/api/{domain}/host/{hostID}/screenshot", ScreenShotServe_Handler)
 
-	r.Post("/api/{domain}/host/{hostURL}/js", JsTool_Handler)
-	r.Get("/api/{domain}/host/{hostURL}/js", JsTool_Handler)
+	r.Post("/api/{domain}/host/{hostID}/js", JsTool_Handler)
+	r.Get("/api/{domain}/host/{hostID}/js", JsTool_Handler)
 	r.Get("/api/{domain}/asn/{asn}", Asn_Handler)
 
 	r.Get("/api/tools/status", ToolStatus_Handler)
@@ -44,6 +44,8 @@ func Run() {
 
 	r.Post("/api/targets/new", NewTargetHandler)
 	r.Get("/api/targets", Targets_Handler)
+
+	r.Get("/api/agent/{domain}/data", AgentData_Handler)
 
 	r.Get("/api/logs", Logs_Handler)
 	r.Get("/login", serveHTML("static/dist/index.html"))
