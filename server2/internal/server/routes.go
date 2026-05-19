@@ -311,11 +311,7 @@ func randString() (string, error) {
 }
 
 func Login_Handler(w http.ResponseWriter, r *http.Request) {
-
-	user := "zev"
-	pass := "Embassy55$"
 	var data LoginData
-
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
@@ -323,7 +319,7 @@ func Login_Handler(w http.ResponseWriter, r *http.Request) {
 
 	ip := realIP(r)
 
-	if data.Username == user && data.Password == pass {
+	if cfg != nil && data.Username == cfg.Username && CheckPassword(data.Password) {
 		token, err := randString()
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Faile Creating cookie"})

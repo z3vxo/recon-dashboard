@@ -71,15 +71,22 @@ func runKatana(tmpDir, id, hostURL string, headless bool) {
 	os.WriteFile(fileName, out, 0644)
 }
 
-func deDupeAndExtract(tmpDir, hostURL, id, urlsPath string) error {
+func deDupeAndExtract(tmpDir, hostURL, id, jsDir, urlsPath string) error {
 	hostname, err := extractHostname(hostURL)
 	if err != nil {
 		return err
 	}
-	cmd := fmt.Sprintf("cat %s/%s_*.txt | sort -u | grep -iE '\\.js(\\?|$)' | grep '%s' > %s", tmpDir, id, hostname, urlsPath)
-	if out, err := exec.Command("sh", "-c", cmd).CombinedOutput(); err != nil {
+	allURLs := jsDir + "/final_urls.txt"
+	dedupCmd := fmt.Sprintf("cat %s/%s_*.txt | sort -u > %s", tmpDir, id, allURLs)
+	if out, err := exec.Command("sh", "-c", dedupCmd).CombinedOutput(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
 			return fmt.Errorf("dedup failed: %w — %s", err, string(out))
+		}
+	}
+	jsCmd := fmt.Sprintf("grep -iE '\\.js(\\?|$)' %s | grep '%s' > %s", allURLs, hostname, urlsPath)
+	if out, err := exec.Command("sh", "-c", jsCmd).CombinedOutput(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+			return fmt.Errorf("js filter failed: %w — %s", err, string(out))
 		}
 	}
 	return nil
@@ -298,13 +305,16 @@ func ScrapeAndScan(host, id, domain string, headless bool) {
 	go func() { defer wg.Done(); runKatana(tmpDir, id, host, headless) }()
 	wg.Wait()
 
-	if err := deDupeAndExtract(tmpDir, host, id, urlsPath); err != nil {
+	if err := deDupeAndExtract(tmpDir, host, id, jsDir, urlsPath); err != nil {
 		SetJob(id, JobResult{Status: JobFailed, Error: err.Error()})
 		return
 	}
 
+	if info, err := os.Stat(jsDir + "/final_urls.txt"); err == nil {
+		slog.Info("js: all URLs saved", "host", host, "final_urls_bytes", info.Size())
+	}
 	if info, err := os.Stat(urlsPath); err == nil {
-		slog.Info("js: dedup complete", "host", host, "js_list_bytes", info.Size())
+		slog.Info("js: JS URLs filtered", "host", host, "js_list_bytes", info.Size())
 	} else {
 		slog.Warn("js: no JS URLs found after dedup", "host", host)
 	}
