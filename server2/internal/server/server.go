@@ -45,7 +45,7 @@ func Run() {
 	r.Post("/api/targets/new", NewTargetHandler)
 	r.Get("/api/targets", Targets_Handler)
 
-	r.Get("/api/agent/{domain}/data", AgentData_Handler)
+	//r.Get("/api/agent/{domain}/data", AgentData_Handler)
 
 	r.Get("/api/logs", Logs_Handler)
 	r.Get("/login", serveHTML("static/dist/index.html"))
