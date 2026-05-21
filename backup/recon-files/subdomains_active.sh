@@ -13,40 +13,16 @@ BLUE='\e[34m'
 BOLD="\e[1m"
 ENDCOLOR='\e[0m'
 
-no_mutate=false
-no_sec_pass=false
-
-usage() {
-  echo "Usage: $0 [--no-mutate] [--no-sec-pass] <domain>"
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --no-mutate)
-      no_mutate=true
-      shift
-      ;;
-    --no-sec-pass)
-      no_sec_pass=true
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    --*)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
-    *)
-      break
-      ;;
+while getopts "b" opt; do
+  case $opt in
+    b) ;;
+    *) echo "Usage: $0 <domain>"; exit 1 ;;
   esac
 done
+shift $((OPTIND - 1))
 
 if [ -z "${1:-}" ]; then
-  echo -e "${BOLD}${RED}[!]${ENDCOLOR} Domain not set, run with: $0 [--no-mutate] [--no-sec-pass] <domain>"
+  echo -e "${BOLD}${RED}[!]${ENDCOLOR} Domain not set, run with: $0 <domain>"
   exit 1
 fi
 
@@ -62,17 +38,7 @@ cleanup() {
 
 
 check_tools() {
-  local tools=(puredns wget)
-
-  if [[ "$no_mutate" == false ]]; then
-    tools+=(alterx)
-  fi
-
-  if [[ "$no_sec_pass" == false ]]; then
-    tools+=(subfinder)
-  fi
-
-  for tool in "${tools[@]}"; do
+  for tool in alterx puredns wget subfinder; do
     if ! command -v "$tool" &> /dev/null; then
       echo -e "${BOLD}${RED}[!]${ENDCOLOR} $tool is not installed!"
       exit 1
@@ -189,17 +155,9 @@ check_tools
 
 get_new_resolvers
 resolve_dns
+subfinder_pass2
 
-if [[ "$no_sec_pass" == true ]]; then
-  echo -e "\n${BOLD}${YELLOW}[!]${ENDCOLOR} --no-sec-pass set; skipping subfinder second pass"
-else
-  subfinder_pass2
-fi
-
-if [[ "$no_mutate" == true ]]; then
-  echo -e "\n${BOLD}${YELLOW}[!]${ENDCOLOR} --no-mutate set; skipping alterx mutation"
-  sort -u "$active_dir/alive.txt" > "$subs_dir/final_subs.txt"
-elif mutate_words; then
+if mutate_words; then
   resolve_mutated
   cat "$active_dir/alive.txt" "$active_dir/alive_mutated.txt" | sort -u > "$subs_dir/final_subs.txt"
 else

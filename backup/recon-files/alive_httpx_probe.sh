@@ -8,45 +8,12 @@
 
 set -euo pipefail
 
-usage() {
-    echo "Usage: $0 [--no-path-probe] <domain>"
-}
-
-NO_PATH_PROBE=false
-DOMAIN=""
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --no-path-probe)
-            NO_PATH_PROBE=true
-            shift
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        --*)
-            echo "Unknown option: $1" >&2
-            usage >&2
-            exit 1
-            ;;
-        *)
-            if [[ -n "$DOMAIN" ]]; then
-                echo "Unexpected argument: $1" >&2
-                usage >&2
-                exit 1
-            fi
-            DOMAIN=$1
-            shift
-            ;;
-    esac
-done
-
-if [[ -z "$DOMAIN" ]]; then
-    usage >&2
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: $0 <domain>" >&2
     exit 1
 fi
 
+DOMAIN=$1
 subs_dir="$HOME/.recon/$DOMAIN/subdomains"
 httpx_dir="$HOME/.recon/$DOMAIN/probe/httpx"
 
@@ -229,15 +196,9 @@ EOF
 main() {
     check_tools
     httpx_enrich
-    if [[ "$NO_PATH_PROBE" == true ]]; then
-        echo -e "${BOLD}${YELLOW}[!]${ENDCOLOR} --no-path-probe set; skipping juicy path probe"
-    else
-        path_probe
-    fi
+    path_probe
     echo -e "${BOLD}${GREEN}[*]${ENDCOLOR} Enriched JSON: ${BOLD}$httpx_dir/${DOMAIN}_httpx_enriched.json${ENDCOLOR}"
-    if [[ "$NO_PATH_PROBE" == false ]]; then
-        echo -e "${BOLD}${GREEN}[*]${ENDCOLOR} Path hits:     ${BOLD}$httpx_dir/${DOMAIN}_path_hits.txt${ENDCOLOR}\n"
-    fi
+    echo -e "${BOLD}${GREEN}[*]${ENDCOLOR} Path hits:     ${BOLD}$httpx_dir/${DOMAIN}_path_hits.txt${ENDCOLOR}\n"
 }
 
 main
