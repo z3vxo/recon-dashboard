@@ -50,7 +50,6 @@ fi
 subs_dir="$HOME/.recon/$DOMAIN/subdomains"
 httpx_dir="$HOME/.recon/$DOMAIN/probe/httpx"
 
-proxy_check_file="$HOME/.config/isproxy.txt"
 
 PORTS="80,443,2082,2083,2086,2087,3000,3001,3443,4200,4443,4567,5000,5001,5443,5601,7080,7443,8000,8001,8008,8080,8081,8082,8083,8090,8181,8443,8800,8834,8888,9000,9090,9200,9443,10000,10443"
 match_codes="200,201,204,301,302,401,403,404,405,407,409,429,503"
@@ -71,15 +70,6 @@ BOLD="\e[1m"; ENDCOLOR='\e[0m'
 HTTPX_TIMEOUT=3
 HTTPX_THREADS=200
 HTTPX_RL=500
-_proxy=$(cat "$proxy_check_file" 2>/dev/null | tr -d '[:space:]')
-if [[ -n "$_proxy" ]]; then
-    export ALL_PROXY="${_proxy/socks5:\/\//socks5h://}"
-    HTTPX_TIMEOUT=10
-    HTTPX_THREADS=50
-    HTTPX_RL=50
-    echo -e "${BOLD}${YELLOW}[~]${ENDCOLOR} Proxy active: $_proxy"
-fi
-unset _proxy
 
 mkdir -p "$httpx_dir"
 rm -f "$httpx_dir/${DOMAIN}_httpx_enriched.json" "$httpx_dir/${DOMAIN}_path_targets.txt" "$httpx_dir/${DOMAIN}_path_hits_raw.json" "$httpx_dir/${DOMAIN}_path_hits.txt"
