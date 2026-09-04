@@ -99,7 +99,7 @@ get_new_resolvers() {
 }
 
 
-# Step 1: resolve all_subs.txt -> alive.txt
+
 resolve_dns() {
   echo -e "\n${BOLD}${BLUE}[+]${ENDCOLOR} Resolving passive subdomains..."
 
@@ -117,39 +117,10 @@ resolve_dns() {
 }
 
 
-# Step 2: subfinder second pass on alive subdomains (parallel)
-subfinder_pass2() {
-  echo -e "\n${BOLD}${BLUE}[+]${ENDCOLOR} Running subfinder second pass on alive subdomains (parallel)..."
 
-  local concurrency=10
-  local tmp_dir="$temp_dir/subfinder_pass2"
-  mkdir -p "$tmp_dir"
 
-  xargs -P "$concurrency" -I {} bash -c \
-    'subfinder -d "{}" -silent -o "'"$tmp_dir"'/{}.txt" > /dev/null 2>&1 || true' \
-    < "$active_dir/alive.txt"
 
-  cat "$tmp_dir"/*.txt 2>/dev/null | sort -u > "$active_dir/subfinder_pass2.txt" || true
-  rm -rf "$tmp_dir"
 
-  if [[ -s "$active_dir/subfinder_pass2.txt" ]]; then
-    echo -e "${BOLD}${GREEN}[+]${ENDCOLOR} Second pass found: ${BOLD}$(wc -l < "$active_dir/subfinder_pass2.txt")${ENDCOLOR} new subdomains"
-    cat "$subs_dir/all_subs.txt" "$active_dir/subfinder_pass2.txt" | sort -u > "$subs_dir/all_subs_tmp.txt"
-    mv "$subs_dir/all_subs_tmp.txt" "$subs_dir/all_subs.txt"
-
-    echo -e "${BOLD}${BLUE}[+]${ENDCOLOR} Re-resolving with new subdomains..."
-    puredns resolve "$subs_dir/all_subs.txt" \
-      --resolvers "$temp_dir/$resolvers_name" \
-      --resolvers-trusted "$temp_dir/$trusted_resolvers_name" \
-      --rate-limit 10000 --rate-limit-trusted 2000 \
-        -w "$active_dir/alive.txt" > /dev/null 2>&1 || true
-    echo -e "${BOLD}${GREEN}[*]${ENDCOLOR} Alive after second pass: ${BOLD}$(wc -l < "$active_dir/alive.txt")${ENDCOLOR}"
-  else
-    echo -e "${BOLD}${YELLOW}[!]${ENDCOLOR} Second pass found no new subdomains"
-  fi
-}
-
-# Step 3: alterx on alive.txt -> mutated.txt
 mutate_words() {
   echo -e "\n${BOLD}${BLUE}[+]${ENDCOLOR} Running alterx on alive subdomains..."
 
@@ -164,7 +135,7 @@ mutate_words() {
 }
 
 
-# Step 3: resolve mutated.txt -> alive_mutated.txt
+
 resolve_mutated() {
   echo -e "\n${BOLD}${BLUE}[+]${ENDCOLOR} Resolving permutated subdomains..."
 
@@ -192,8 +163,6 @@ resolve_dns
 
 if [[ "$no_sec_pass" == true ]]; then
   echo -e "\n${BOLD}${YELLOW}[!]${ENDCOLOR} --no-sec-pass set; skipping subfinder second pass"
-else
-  subfinder_pass2
 fi
 
 if [[ "$no_mutate" == true ]]; then
